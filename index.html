@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<title>معدل التمريض التراكمي</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Reem+Kufi:wght@500;700&display=swap">
+<style>
+/* Layout: one narrow column like a grade sheet — live result card on top, four stage sheets below. */
+:root {
+  --bg: #eef1f6;
+  --surface: #ffffff;
+  --sunken: #f5f7fb;
+  --ink: #16213a;
+  --muted: #5d6882;
+  --line: #d9dfea;
+  --accent: #2547a8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e4eafa;
+  --s1: #b3c3ec; --s2: #7f9adf; --s3: #4d70cc; --s4: #2547a8;
+  --ok: #1d7f55; --ok-soft: #e1f3ea;
+  --warn: #9a5b0b; --warn-soft: #fbf0dc;
+  --bad: #b8392a; --bad-soft: #fbe6e2;
+  --font-display: "Reem Kufi", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  --font-body: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, "Noto Sans Arabic", sans-serif;
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e131e; --surface: #161d2c; --sunken: #111827; --ink: #e5e9f3; --muted: #97a1b9; --line: #273047;
+    --accent: #93abf2; --accent-ink: #0e131e; --accent-soft: #1f2a46;
+    --s1: #34446f; --s2: #4c63a3; --s3: #6b88d6; --s4: #9db4f6;
+    --ok: #55c896; --ok-soft: #133226; --warn: #e9b062; --warn-soft: #33270f; --bad: #f08471; --bad-soft: #3a1c18;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e131e; --surface: #161d2c; --sunken: #111827; --ink: #e5e9f3; --muted: #97a1b9; --line: #273047;
+  --accent: #93abf2; --accent-ink: #0e131e; --accent-soft: #1f2a46;
+  --s1: #34446f; --s2: #4c63a3; --s3: #6b88d6; --s4: #9db4f6;
+  --ok: #55c896; --ok-soft: #133226; --warn: #e9b062; --warn-soft: #33270f; --bad: #f08471; --bad-soft: #3a1c18;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-tap-highlight-color: transparent;
+}
+.app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding-block: 18px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.num, input, .bar-legend, .calc-line { font-variant-numeric: tabular-nums; }
+
+/* Header */
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.top h1 { font-family: var(--font-display); font-weight: 700; font-size: 1.45rem; margin: 0; letter-spacing: 0; text-wrap: balance; }
+.top .weights { color: var(--muted); font-size: .85rem; direction: ltr; }
+
+/* Tabs */
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; background: var(--sunken); border: 1px solid var(--line); border-radius: 12px; }
+.tabs button { font: inherit; font-size: .9rem; font-weight: 600; color: var(--muted); background: none; border: 0; border-radius: 9px; padding: 8px 4px; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(10, 20, 40, .12); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Result card */
+.result { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.result-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.result-label { color: var(--muted); font-size: .85rem; font-weight: 600; }
+.big { font-family: var(--font-display); font-size: 3rem; line-height: 1.05; font-weight: 700; direction: ltr; display: inline-block; }
+.big.pending { color: var(--muted); }
+.big small { font-size: 1.4rem; font-weight: 500; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.bad { background: var(--bad-soft); color: var(--bad); }
+.chip.muted { background: var(--sunken); color: var(--muted); border: 1px solid var(--line); }
+.chip.accent { background: var(--accent-soft); color: var(--accent); }
+.result-note { color: var(--muted); font-size: .88rem; margin: 0; }
+
+.bar { display: flex; height: 14px; background: var(--sunken); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; direction: ltr; }
+.bar span { height: 100%; transition: width .35s ease; }
+.bar span + span { border-left: 2px solid var(--surface); }
+.bar-legend { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; font-size: .78rem; }
+.bar-legend div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.bar-legend .k { color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.bar-legend .k i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.bar-legend .v { font-weight: 600; direction: ltr; text-align: right; }
+.bar-legend .v em { font-style: normal; color: var(--muted); font-weight: 400; }
+
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { font: inherit; font-size: .88rem; font-weight: 600; border-radius: 10px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.ghost { background: none; border-color: transparent; color: var(--muted); padding-inline: 6px; }
+.btn.danger { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+
+/* Stage sheets */
+.stages { display: flex; flex-direction: column; gap: 10px; }
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.stage-head { width: 100%; font: inherit; color: inherit; background: none; border: 0; cursor: pointer; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px 16px; text-align: right; }
+.stage-no { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; color: var(--accent-ink); }
+.stage-title { font-weight: 700; font-size: 1rem; }
+.stage-meta { color: var(--muted); font-size: .8rem; }
+.stage-body { border-top: 1px solid var(--line); padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+
+.mode { display: inline-grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; background: var(--sunken); border: 1px solid var(--line); border-radius: 10px; align-self: flex-start; }
+.mode button { font: inherit; font-size: .84rem; font-weight: 600; color: var(--muted); background: none; border: 0; padding: 6px 12px; border-radius: 8px; cursor: pointer; }
+.mode button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(10, 20, 40, .12); }
+
+.group { display: flex; flex-direction: column; }
+.group-title { display: flex; justify-content: space-between; font-size: .82rem; font-weight: 700; color: var(--accent); padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.group-title span:last-child { color: var(--muted); font-weight: 500; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) auto 84px; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--line); }
+.row:last-child { border-bottom: 0; }
+.row label { min-width: 0; font-size: .92rem; }
+.units { font-size: .75rem; color: var(--muted); background: var(--sunken); border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; white-space: nowrap; }
+.field {
+  width: 100%; font: inherit; font-size: 1rem; font-weight: 600; text-align: center; direction: ltr;
+  background: var(--sunken); color: var(--ink); border: 1px solid var(--line); border-radius: 9px; padding: 7px 6px;
+}
+.field::placeholder { color: var(--muted); opacity: .55; font-weight: 400; }
+.field.invalid { border-color: var(--bad); background: var(--bad-soft); }
+.direct { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.direct .field { width: 120px; }
+.hint { color: var(--muted); font-size: .82rem; margin: 0; }
+.err { color: var(--bad); font-size: .85rem; margin: 0; }
+
+.calc-line { background: var(--sunken); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: .88rem; display: flex; flex-direction: column; gap: 2px; }
+.calc-line b { font-weight: 700; }
+.calc-line .eq { direction: ltr; text-align: right; }
+
+/* Manual tab */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.panel h2 { font-family: var(--font-display); font-size: 1.15rem; margin: 0; font-weight: 700; }
+.panel p { margin: 0; }
+.mrow { display: grid; grid-template-columns: 2ch minmax(0, 1fr) minmax(0, 1fr) 36px; gap: 8px; align-items: center; }
+.mrow .idx { color: var(--muted); font-size: .85rem; text-align: center; }
+.mhead { font-size: .78rem; color: var(--muted); font-weight: 600; }
+.icon-btn { width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: 1.1rem; cursor: pointer; line-height: 1; }
+
+/* How-to tab */
+.steps { margin: 0; padding-inline-start: 1.3em; display: flex; flex-direction: column; gap: 6px; }
+.weights-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.weights-row div { text-align: center; border-radius: 10px; padding: 8px 4px; font-size: .82rem; color: var(--accent-ink); font-weight: 600; }
+.weights-row b { display: block; font-family: var(--font-display); font-size: 1.3rem; }
+.utable { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.utable th { text-align: right; font-weight: 700; white-space: nowrap; vertical-align: top; padding: 8px 0 8px 12px; color: var(--accent); }
+.utable td { padding: 8px 0; color: var(--ink); }
+.utable tr + tr th, .utable tr + tr td { border-top: 1px solid var(--line); }
+.example { background: var(--sunken); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: .9rem; }
+
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 999px; font-size: .88rem; font-weight: 600; z-index: 20; }
+.copy-src { position: fixed; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; padding: 0; resize: none; }
+
+@media (max-width: 420px) {
+  .big { font-size: 2.5rem; }
+  .row { grid-template-columns: minmax(0, 1fr) auto 72px; gap: 8px; }
+  .bar-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) { .bar span { transition: none; } }
+</style>
+</head>
+<body>
+<div class="app" dir="rtl" lang="ar">
+  <header class="top">
+    <h1>معدل التمريض التراكمي</h1>
+    <span class="weights">10% · 20% · 30% · 40%</span>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="الأقسام">
+    <button id="tab-cum" role="tab" aria-selected="true" data-tab="cum">التراكمي</button>
+    <button id="tab-custom" role="tab" aria-selected="false" data-tab="custom">حساب يدوي</button>
+    <button id="tab-howto" role="tab" aria-selected="false" data-tab="howto">شلون ينحسب؟</button>
+  </nav>
+
+  <!-- التراكمي -->
+  <section id="view-cum" class="app-view" style="display:flex;flex-direction:column;gap:14px">
+    <div class="result" aria-live="polite">
+      <div class="result-head">
+        <div>
+          <div class="result-label">المعدل التراكمي النهائي</div>
+          <div id="total" class="big pending">—</div>
+        </div>
+        <span id="total-chip" class="chip muted">0 من 4 مراحل</span>
+      </div>
+      <div class="bar" id="bar" aria-hidden="true"></div>
+      <div class="bar-legend" id="legend"></div>
+      <p class="result-note" id="total-note">املأ درجات كل مرحلة، أو اكتب معدلها الجاهز، والنتيجة تطلع هنا مباشرة.</p>
+      <div class="actions">
+        <button class="btn primary" id="copy-btn" hidden>نسخ النتيجة</button>
+        <button class="btn" id="example-btn">جرّب مثال الدليل</button>
+        <button class="btn ghost" id="reset-btn" hidden>مسح كل الدرجات</button>
+      </div>
+    </div>
+    <div class="stages" id="stages"></div>
+  </section>
+
+  <!-- حساب يدوي -->
+  <section id="view-custom" class="app-view" hidden>
+    <div class="panel">
+      <h2>الحساب اليدوي</h2>
+      <p class="hint">إذا مواد كليتك تختلف عن الجدول: اكتب لكل مادة عدد وحداتها ودرجتها.</p>
+      <div class="mrow mhead"><span></span><span>الوحدات</span><span>الدرجة</span><span></span></div>
+      <div id="mrows" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div class="actions"><button class="btn" id="add-row">+ مادة</button></div>
+      <div class="calc-line" id="custom-out"></div>
+    </div>
+  </section>
+
+  <!-- الطريقة -->
+  <section id="view-howto" class="app-view" hidden>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="panel">
+        <h2>شلون ينحسب المعدل التراكمي؟</h2>
+        <div class="weights-row">
+          <div style="background:var(--s1);color:var(--ink)"><b>10%</b>الأولى</div>
+          <div style="background:var(--s2)"><b>20%</b>الثانية</div>
+          <div style="background:var(--s3)"><b>30%</b>الثالثة</div>
+          <div style="background:var(--s4)"><b>40%</b>الرابعة</div>
+        </div>
+        <ol class="steps">
+          <li>تضرب درجة كل مادة بعدد وحداتها.</li>
+          <li>تجمع النواتج لكل مواد الكورسين.</li>
+          <li>تقسم المجموع على عدد وحدات المرحلة، وهذا معدل المرحلة.</li>
+          <li>تضرب معدل المرحلة بنسبتها، وهذه حصتها من التراكمي.</li>
+          <li>تجمع حصص المراحل الأربع، وهذا معدل التخرج.</li>
+        </ol>
+        <div class="example"><b>مثال:</b> المرحلة الأولى مجموع نقاطها 3427 ووحداتها 41<br><span class="num" dir="ltr">3427 ÷ 41 = 83.59 → × 10% = 8.36</span></div>
+        <p class="hint">التقريب مثل الدليل بالضبط: معدل المرحلة لمرتبتين، ثم حصتها لمرتبتين، ثم الجمع.</p>
+      </div>
+      <div class="panel">
+        <h2>عدد الوحدات لكل مادة</h2>
+        <div style="overflow-x:auto"><table class="utable" id="utable"></table></div>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+<textarea class="copy-src" id="copy-src" aria-hidden="true" tabindex="-1"></textarea>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ===== البيانات (منقولة من lib/data.js بالبوت) ===== */
+  var STAGES = {
+    1: { name: 'المرحلة الأولى', short: 'الأولى', weight: 10, groups: [
+      { title: 'الكورس الأول', items: [['أساسيات التمريض', 7], ['تشريح جسم الإنسان', 4], ['الكيمياء الحياتية', 4], ['اللغة الإنجليزية', 2], ['أخلاقيات مهنة التمريض', 2], ['علم الكمبيوتر', 1], ['الديمقراطية وحقوق الإنسان', 2]] },
+      { title: 'الكورس الثاني', items: [['أساسيات التمريض', 8], ['الفسلجة', 4], ['المصطلحات الطبية', 2], ['اللغة الإنجليزية', 2], ['اللغة العربية', 2], ['علم الكمبيوتر', 1]] }
+    ] },
+    2: { name: 'المرحلة الثانية', short: 'الثانية', weight: 20, groups: [
+      { title: 'الكورس الأول', items: [['تمريض البالغين', 8], ['الأحياء المجهرية', 3], ['التقييم الصحي', 3], ['علم الكمبيوتر', 1], ['جرائم نظام البعث', 2], ['علم الأدوية', 2]] },
+      { title: 'الكورس الثاني', items: [['تمريض البالغين', 8], ['الأحياء المجهرية', 3], ['الفسلجة المرضية', 2], ['علم الكمبيوتر', 1], ['اللغة العربية', 2], ['علم الأدوية', 2]] }
+    ] },
+    3: { name: 'المرحلة الثالثة', short: 'الثالثة', weight: 30, groups: [
+      { title: 'قسم الأطفال', items: [['تمريض الأطفال', 8], ['النمو والنماء', 5], ['الإحصاء الحياتي', 2]] },
+      { title: 'قسم الأم والوليد', items: [['تمريض الأم والوليد', 8], ['طرائق البحث', 2], ['علم الاجتماع', 2], ['التغذية', 2]] }
+    ] },
+    4: { name: 'المرحلة الرابعة', short: 'الرابعة', weight: 40, groups: [
+      { title: 'قسم صحة المجتمع', items: [['تمريض صحة المجتمع', 7], ['الإدارة والقيادة', 3], ['التعزيز الصحي', 2], ['الوبائيات', 2], ['القضايا الحديثة', 2]] },
+      { title: 'قسم الصحة النفسية', items: [['تمريض الصحة النفسية', 7], ['علم النفس', 2], ['الرعاية الحرجة', 6], ['بحث التخرج', 2]] }
+    ] }
+  };
+  var UNITS_TABLE = [
+    [1, 'علم الكمبيوتر، الديمقراطية، حقوق الإنسان'],
+    [2, 'اللغة الإنجليزية، اللغة العربية، المصطلحات الطبية، جرائم نظام البعث، علم الأدوية، الفسلجة المرضية، أخلاقيات مهنة التمريض، الإحصاء الحياتي، التغذية، طرائق البحث، علم الاجتماع، علم النفس، التعزيز الصحي، القضايا الحديثة، الوبائيات'],
+    [3, 'التقييم الصحي، الأحياء المجهرية، الإدارة والقيادة'],
+    [4, 'التشريح، الفسلجة، الكيمياء الحياتية'],
+    [5, 'النمو والنماء'],
+    [6, 'الرعاية الحرجة'],
+    [7, 'أساسيات التمريض (كورس أول)، صحة المجتمع، النفسية'],
+    [8, 'أساسيات التمريض (كورس ثاني)، البالغين، النسائية والتوليد (الأم والوليد)، الأطفال']
+  ];
+  var GUIDE_EXAMPLE = ['83.59', '80.78', '85.45', '88.82'];
+
+  /* ===== الحساب (نفس منطق lib/calc.js — بوحدة جزء من مئة) ===== */
+  function subjectsOf(s) {
+    var out = [];
+    STAGES[s].groups.forEach(function (g) { g.items.forEach(function (it) { out.push({ group: g.title, name: it[0], units: it[1] }); }); });
+    return out;
+  }
+  function unitsOf(s) { return subjectsOf(s).reduce(function (a, x) { return a + x.units; }, 0); }
+  function toLatin(t) {
+    return String(t == null ? '' : t)
+      .replace(/[٠-٩]/g, function (d) { return String(d.charCodeAt(0) - 0x0660); })
+      .replace(/[۰-۹]/g, function (d) { return String(d.charCodeAt(0) - 0x06f0); })
+      .replace(/[٫,]/g, '.').trim();
+  }
+  // يرجع: null = فارغ، NaN = غير صالح، أو رقم
+  function parseField(t, max) {
+    var s = toLatin(t);
+    if (s === '') return null;
+    if (!/^\d+(\.\d+)?$/.test(s)) return NaN;
+    var n = Number(s);
+    return n >= 0 && n <= (max == null ? 100 : max) ? n : NaN;
+  }
+  function fmt(h) { return (h / 100).toFixed(2); }
+  function avgH(points, units) { return Math.round((points * 100) / units); }
+  function shareH(a, w) { return Math.round((a * w) / 100); }
+  function numStr(n) { return Number.isInteger(n) ? String(n) : String(+n.toFixed(2)); }
+  function rating(h) {
+    var v = h / 100;
+    if (v >= 90) return { label: 'امتياز', tone: 'ok' };
+    if (v >= 80) return { label: 'جيد جداً', tone: 'ok' };
+    if (v >= 70) return { label: 'جيد', tone: 'accent' };
+    if (v >= 60) return { label: 'متوسط', tone: 'warn' };
+    if (v >= 50) return { label: 'مقبول', tone: 'warn' };
+    return { label: 'راسب', tone: 'bad' };
+  }
+
+  function computeStage(s) {
+    var st = state.stages[s];
+    if (st.mode === 'direct') {
+      var d = parseField(st.direct);
+      if (d === null) return { status: 'empty' };
+      if (isNaN(d)) return { status: 'error', msg: 'المعدل لازم يكون رقم بين 0 و 100.' };
+      return { status: 'done', direct: true, avgH: Math.round(d * 100) };
+    }
+    var subs = subjectsOf(s), filled = 0, points = 0, bad = -1;
+    for (var i = 0; i < subs.length; i++) {
+      var g = parseField(st.grades[i]);
+      if (g === null) continue;
+      if (isNaN(g)) { if (bad === -1) bad = i; continue; }
+      filled++; points += subs[i].units * g;
+    }
+    if (bad !== -1) return { status: 'error', msg: 'الدرجة رقم ' + (bad + 1) + ' غير صحيحة — لازم تكون بين 0 و 100.' };
+    if (filled === 0) return { status: 'empty', total: subs.length };
+    if (filled < subs.length) return { status: 'partial', filled: filled, total: subs.length };
+    var units = unitsOf(s);
+    return { status: 'done', direct: false, points: points, units: units, avgH: avgH(points, units) };
+  }
+
+  /* ===== الحالة والحفظ ===== */
+  var KEY = 'nursing-gpa-v1';
+  function blank() {
+    var st = { tab: 'cum', open: 1, stages: {}, custom: [{ u: '', g: '' }, { u: '', g: '' }, { u: '', g: '' }] };
+    [1, 2, 3, 4].forEach(function (s) { st.stages[s] = { mode: 'subjects', grades: subjectsOf(s).map(function () { return ''; }), direct: '' }; });
+    return st;
+  }
+  var state = blank();
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (saved && saved.stages) {
+      [1, 2, 3, 4].forEach(function (s) {
+        var v = saved.stages[s];
+        if (v && Array.isArray(v.grades) && v.grades.length === state.stages[s].grades.length) state.stages[s] = v;
+      });
+      if (Array.isArray(saved.custom) && saved.custom.length) state.custom = saved.custom;
+      if (saved.open) state.open = saved.open;
+    }
+  } catch (e) { /* التخزين غير متاح — نكمل بدون حفظ */ }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+  /* ===== تيليكرام ===== */
+  var tg = window.Telegram && window.Telegram.WebApp;
+  var inTg = !!(tg && tg.initData);
+  function applyTgTheme() {
+    if (!inTg) return;
+    document.documentElement.setAttribute('data-theme', tg.colorScheme === 'dark' ? 'dark' : 'light');
+    try {
+      var bg = getComputedStyle(document.body).backgroundColor;
+      var m = bg.match(/\d+/g);
+      if (m) {
+        var hex = '#' + m.slice(0, 3).map(function (x) { return ('0' + Number(x).toString(16)).slice(-2); }).join('');
+        tg.setHeaderColor(hex); tg.setBackgroundColor(hex);
+      }
+    } catch (e) {}
+  }
+  if (inTg) {
+    tg.ready(); tg.expand();
+    applyTgTheme();
+    tg.onEvent('themeChanged', applyTgTheme);
+  }
+  function haptic(kind) { try { if (inTg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred(kind); } catch (e) {} }
+
+  /* ===== أدوات ===== */
+  function el(tag, attrs, html) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) { if (k === 'class') n.className = attrs[k]; else n.setAttribute(k, attrs[k]); }
+    if (html != null) n.innerHTML = html;
+    return n;
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  var toastTimer;
+  function toast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 1800);
+  }
+  function unitLabel(n) { return n === 1 ? 'وحدة' : n === 2 ? 'وحدتان' : n <= 10 ? n + ' وحدات' : n + ' وحدة'; }
+  function focusNext(input) {
+    var all = Array.prototype.slice.call(document.querySelectorAll('.app-view:not([hidden]) .field'));
+    var i = all.indexOf(input);
+    if (i > -1 && all[i + 1]) all[i + 1].focus(); else input.blur();
+  }
+
+  /* ===== المراحل ===== */
+  var stagesEl = document.getElementById('stages');
+  var prevStatus = {};
+
+  function buildStage(s) {
+    var st = STAGES[s];
+    var card = el('article', { class: 'stage', id: 'stage-' + s });
+    var head = el('button', { class: 'stage-head', 'aria-expanded': 'false', 'aria-controls': 'stage-body-' + s, id: 'stage-head-' + s });
+    head.innerHTML =
+      '<span class="stage-no" style="background:var(--s' + s + ');' + (s === 1 ? 'color:var(--ink)' : '') + '">' + s + '</span>' +
+      '<span><span class="stage-title">' + st.name + '</span><br><span class="stage-meta">الوزن ' + st.weight + '% · ' + unitsOf(s) + ' وحدة</span></span>' +
+      '<span class="chip muted" id="stage-chip-' + s + '">فارغة</span>';
+    head.addEventListener('click', function () {
+      state.open = state.open === s ? 0 : s; save(); syncOpen();
+    });
+    var body = el('div', { class: 'stage-body', id: 'stage-body-' + s });
+    card.appendChild(head); card.appendChild(body);
+    stagesEl.appendChild(card);
+    buildStageBody(s);
+  }
+
+  function buildStageBody(s) {
+    var body = document.getElementById('stage-body-' + s);
+    var st = state.stages[s];
+    body.innerHTML = '';
+
+    var mode = el('div', { class: 'mode', role: 'group', 'aria-label': 'طريقة الإدخال' });
+    [['subjects', 'درجات المواد'], ['direct', 'عندي المعدل جاهز']].forEach(function (m) {
+      var b = el('button', { type: 'button', 'aria-pressed': String(st.mode === m[0]), id: 'mode-' + s + '-' + m[0] }, m[1]);
+      b.addEventListener('click', function () {
+        if (st.mode === m[0]) return;
+        st.mode = m[0]; save(); buildStageBody(s); update();
+        var f = body.querySelector('.field'); if (f) f.focus();
+      });
+      mode.appendChild(b);
+    });
+    body.appendChild(mode);
+
+    if (st.mode === 'direct') {
+      var wrap = el('div', { class: 'direct' });
+      var lab = el('label', { for: 'direct-' + s }, 'معدل ' + STAGES[s].name);
+      var inp = el('input', { class: 'field', id: 'direct-' + s, inputmode: 'decimal', autocomplete: 'off', placeholder: '83.59', enterkeyhint: 'done' });
+      inp.value = st.direct || '';
+      inp.addEventListener('input', function () { st.direct = inp.value; save(); update(); });
+      inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+      wrap.appendChild(lab); wrap.appendChild(inp);
+      body.appendChild(wrap);
+    } else {
+      var idx = 0;
+      STAGES[s].groups.forEach(function (g) {
+        var gu = g.items.reduce(function (a, it) { return a + it[1]; }, 0);
+        var grp = el('div', { class: 'group' });
+        grp.appendChild(el('div', { class: 'group-title' }, '<span>' + g.title + '</span><span>' + gu + ' وحدة</span>'));
+        g.items.forEach(function (it) {
+          var i = idx++;
+          var row = el('div', { class: 'row' });
+          var id = 'g-' + s + '-' + i;
+          row.appendChild(el('label', { for: id }, esc(it[0])));
+          row.appendChild(el('span', { class: 'units' }, unitLabel(it[1])));
+          var inp = el('input', { class: 'field', id: id, inputmode: 'decimal', autocomplete: 'off', placeholder: '—', enterkeyhint: 'next', 'aria-label': it[0] + ' — الدرجة' });
+          inp.value = st.grades[i] || '';
+          inp.addEventListener('input', function () { st.grades[i] = inp.value; save(); update(); });
+          inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); focusNext(inp); } });
+          row.appendChild(inp);
+          grp.appendChild(row);
+        });
+        body.appendChild(grp);
+      });
+    }
+    body.appendChild(el('p', { class: 'err', id: 'stage-err-' + s, hidden: '' }));
+    body.appendChild(el('div', { class: 'calc-line', id: 'stage-calc-' + s }));
+  }
+
+  function syncOpen() {
+    [1, 2, 3, 4].forEach(function (s) {
+      var open = state.open === s;
+      document.getElementById('stage-body-' + s).hidden = !open;
+      document.getElementById('stage-head-' + s).setAttribute('aria-expanded', String(open));
+    });
+  }
+
+  /* ===== التحديث المباشر ===== */
+  function update() {
+    var results = {}, done = 0, sumShare = 0, sumWeight = 0;
+    [1, 2, 3, 4].forEach(function (s) {
+      var r = computeStage(s), st = STAGES[s];
+      results[s] = r;
+      var chip = document.getElementById('stage-chip-' + s);
+      var calc = document.getElementById('stage-calc-' + s);
+      var err = document.getElementById('stage-err-' + s);
+
+      // تلوين الحقول غير الصالحة
+      var stS = state.stages[s];
+      if (stS.mode === 'direct') {
+        var df = document.getElementById('direct-' + s);
+        if (df) df.classList.toggle('invalid', isNaN(parseField(stS.direct)));
+      } else {
+        stS.grades.forEach(function (v, i) {
+          var f = document.getElementById('g-' + s + '-' + i);
+          if (f) f.classList.toggle('invalid', isNaN(parseField(v)));
+        });
+      }
+
+      err.hidden = r.status !== 'error';
+      if (r.status === 'error') err.textContent = r.msg;
+
+      if (r.status === 'done') {
+        done++;
+        var sh = shareH(r.avgH, st.weight);
+        sumShare += sh; sumWeight += st.weight;
+        var rt = rating(r.avgH);
+        chip.className = 'chip ' + rt.tone;
+        chip.textContent = fmt(r.avgH) + '%';
+        calc.hidden = false;
+        calc.innerHTML = (r.direct ? '' : '<span class="eq">' + numStr(r.points) + ' ÷ ' + r.units + ' = <b>' + fmt(r.avgH) + '%</b></span>') +
+          '<span>معدل المرحلة <b>' + fmt(r.avgH) + '%</b> · ' + rt.label + '</span>' +
+          '<span>حصتها من التراكمي: <span dir="ltr">' + fmt(r.avgH) + ' × ' + st.weight + '% = <b>' + fmt(sh) + '</b></span></span>';
+        if (prevStatus[s] && prevStatus[s] !== 'done') haptic('success');
+      } else if (r.status === 'partial') {
+        chip.className = 'chip warn';
+        chip.textContent = 'باقي ' + (r.total - r.filled);
+        calc.hidden = false;
+        calc.innerHTML = '<span>دخلت ' + r.filled + ' من ' + r.total + ' درجة. كمّل الباقي حتى يطلع معدل المرحلة.</span>';
+      } else if (r.status === 'error') {
+        chip.className = 'chip bad'; chip.textContent = 'تحقق';
+        calc.hidden = true;
+      } else {
+        chip.className = 'chip muted'; chip.textContent = 'فارغة';
+        calc.hidden = false;
+        calc.innerHTML = stS.mode === 'direct'
+          ? '<span>اكتب معدل المرحلة كرقم واحد، مثلاً 83.59</span>'
+          : '<span>اكتب درجة كل مادة من 100. الأرقام العربية (٨٥) والإنجليزية (85) كلها تشتغل.</span>';
+      }
+      prevStatus[s] = r.status;
+    });
+
+    // الشريط: كل جزء = حصة المرحلة من 100
+    var bar = document.getElementById('bar'), legend = document.getElementById('legend');
+    bar.innerHTML = ''; legend.innerHTML = '';
+    [1, 2, 3, 4].forEach(function (s) {
+      var r = results[s], w = STAGES[s].weight;
+      var sh = r.status === 'done' ? shareH(r.avgH, w) : 0;
+      var seg = el('span'); seg.style.width = (sh / 100) + '%'; seg.style.background = 'var(--s' + s + ')';
+      bar.appendChild(seg);
+      legend.appendChild(el('div', null,
+        '<span class="k"><i style="background:var(--s' + s + ')"></i>' + STAGES[s].short + '</span>' +
+        '<span class="v">' + (r.status === 'done' ? fmt(sh) : '—') + ' <em>/ ' + w + '</em></span>'));
+    });
+
+    var total = document.getElementById('total'), chipT = document.getElementById('total-chip'), note = document.getElementById('total-note');
+    var copyBtn = document.getElementById('copy-btn'), exBtn = document.getElementById('example-btn'), resetBtn = document.getElementById('reset-btn');
+    var anything = [1, 2, 3, 4].some(function (s) { return results[s].status !== 'empty'; });
+
+    if (done === 4) {
+      var rt = rating(sumShare);
+      total.className = 'big';
+      total.innerHTML = fmt(sumShare) + '<small>%</small>';
+      chipT.className = 'chip ' + rt.tone; chipT.textContent = rt.label;
+      note.innerHTML = '<span dir="ltr" class="num">' + [1, 2, 3, 4].map(function (s) { return fmt(shareH(results[s].avgH, STAGES[s].weight)); }).join(' + ') + ' = ' + fmt(sumShare) + '%</span>' + (sumShare >= 5000 ? ' · مبروك!' : '');
+    } else {
+      total.className = 'big pending';
+      total.textContent = '—';
+      chipT.className = 'chip muted'; chipT.textContent = done + ' من 4 مراحل';
+      note.textContent = done === 0
+        ? 'املأ درجات كل مرحلة، أو اكتب معدلها الجاهز، والنتيجة تطلع هنا مباشرة.'
+        : 'المحسوب لحد الآن ' + fmt(sumShare) + ' من ' + sumWeight + '. كمّل المراحل الباقية حتى يطلع المعدل النهائي.';
+    }
+    copyBtn.hidden = done !== 4;
+    exBtn.hidden = anything;
+    resetBtn.hidden = !anything;
+    lastResults = results;
+  }
+  var lastResults = {};
+
+  /* ===== الأزرار العامة ===== */
+  document.getElementById('example-btn').addEventListener('click', function () {
+    [1, 2, 3, 4].forEach(function (s, i) { state.stages[s].mode = 'direct'; state.stages[s].direct = GUIDE_EXAMPLE[i]; buildStageBody(s); });
+    state.open = 0; save(); syncOpen(); update();
+    toast('هذا مثال الدليل — امسحه وأدخل درجاتك');
+  });
+
+  var resetArmed = false, resetTimer;
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    var b = this;
+    if (!resetArmed) {
+      resetArmed = true; b.textContent = 'اضغط مرة ثانية للتأكيد'; b.classList.add('danger'); b.classList.remove('ghost');
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(function () { resetArmed = false; b.textContent = 'مسح كل الدرجات'; b.classList.remove('danger'); b.classList.add('ghost'); }, 3500);
+      return;
+    }
+    clearTimeout(resetTimer); resetArmed = false; b.textContent = 'مسح كل الدرجات'; b.classList.remove('danger'); b.classList.add('ghost');
+    var fresh = blank();
+    state.stages = fresh.stages; state.open = 1;
+    [1, 2, 3, 4].forEach(buildStageBody);
+    save(); syncOpen(); update();
+    toast('انمسحت الدرجات');
+  });
+
+  function resultText() {
+    var lines = ['🎓 المعدل التراكمي — كليات التمريض', ''];
+    var sum = 0;
+    [1, 2, 3, 4].forEach(function (s) {
+      var r = lastResults[s], w = STAGES[s].weight, sh = shareH(r.avgH, w);
+      sum += sh;
+      lines.push('• ' + STAGES[s].short + ': ' + fmt(r.avgH) + ' × ' + w + '% = ' + fmt(sh));
+    });
+    lines.push('━━━━━━━━━━━━');
+    lines.push('المعدل التراكمي النهائي: ' + fmt(sum) + '% (' + rating(sum).label + ')');
+    return lines.join('\n');
+  }
+  document.getElementById('copy-btn').addEventListener('click', function () {
+    var text = resultText();
+    function fallback() {
+      var ta = document.getElementById('copy-src');
+      ta.value = text; ta.select();
+      try { document.execCommand('copy'); toast('انسخت النتيجة'); } catch (e) { toast('ما گدرت أنسخ — جرّب مرة ثانية'); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { toast('انسخت النتيجة'); }, fallback);
+    } else fallback();
+  });
+
+  /* ===== الحساب اليدوي ===== */
+  var mrows = document.getElementById('mrows');
+  function buildCustom() {
+    mrows.innerHTML = '';
+    state.custom.forEach(function (row, i) {
+      var r = el('div', { class: 'mrow' });
+      r.appendChild(el('span', { class: 'idx' }, String(i + 1)));
+      var u = el('input', { class: 'field', id: 'cu-' + i, inputmode: 'decimal', autocomplete: 'off', placeholder: '7', enterkeyhint: 'next', 'aria-label': 'المادة ' + (i + 1) + ' — الوحدات' });
+      var g = el('input', { class: 'field', id: 'cg-' + i, inputmode: 'decimal', autocomplete: 'off', placeholder: '80', enterkeyhint: 'next', 'aria-label': 'المادة ' + (i + 1) + ' — الدرجة' });
+      u.value = row.u; g.value = row.g;
+      u.addEventListener('input', function () { row.u = u.value; save(); updateCustom(); });
+      g.addEventListener('input', function () { row.g = g.value; save(); updateCustom(); });
+      [u, g].forEach(function (f) { f.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); focusNext(f); } }); });
+      var del = el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'احذف المادة ' + (i + 1) }, '×');
+      del.addEventListener('click', function () {
+        state.custom.splice(i, 1);
+        if (!state.custom.length) state.custom.push({ u: '', g: '' });
+        save(); buildCustom(); updateCustom();
+      });
+      r.appendChild(u); r.appendChild(g); r.appendChild(del);
+      mrows.appendChild(r);
+    });
+  }
+  function updateCustom() {
+    var out = document.getElementById('custom-out');
+    var units = 0, points = 0, n = 0, error = '';
+    state.custom.forEach(function (row, i) {
+      var u = parseField(row.u, 20), g = parseField(row.g);
+      var uf = document.getElementById('cu-' + i), gf = document.getElementById('cg-' + i);
+      var uBad = isNaN(u) || u === 0, gBad = isNaN(g);
+      if (uf) uf.classList.toggle('invalid', uBad && u !== null);
+      if (gf) gf.classList.toggle('invalid', gBad);
+      if (u === null && g === null) return;
+      if (uBad && u !== null && !error) error = 'عدد الوحدات بالسطر ' + (i + 1) + ' غير منطقي (لازم بين 1 و 20).';
+      else if (gBad && !error) error = 'الدرجة بالسطر ' + (i + 1) + ' لازم تكون بين 0 و 100.';
+      else if ((u === null || g === null) && !error) error = 'السطر ' + (i + 1) + ' ناقص — اكتب الوحدات والدرجة.';
+      else if (!uBad && !gBad && u !== null && g !== null) { units += u; points += u * g; n++; }
+    });
+    if (error) { out.innerHTML = '<span class="err">' + error + '</span>'; return; }
+    if (!n) { out.innerHTML = '<span>اكتب الوحدات والدرجة لكل مادة، والمعدل يطلع هنا.</span>'; return; }
+    var a = avgH(points, units), rt = rating(a);
+    out.innerHTML =
+      '<span class="eq">' + numStr(points) + ' ÷ ' + numStr(units) + ' = <b>' + fmt(a) + '%</b></span>' +
+      '<span>المعدل <b>' + fmt(a) + '%</b> · <span class="chip ' + rt.tone + '">' + rt.label + '</span></span>';
+  }
+  document.getElementById('add-row').addEventListener('click', function () {
+    state.custom.push({ u: '', g: '' }); save(); buildCustom(); updateCustom();
+    document.getElementById('cu-' + (state.custom.length - 1)).focus();
+  });
+
+  /* ===== جدول الوحدات ===== */
+  var ut = document.getElementById('utable');
+  UNITS_TABLE.forEach(function (r) {
+    var tr = el('tr'); tr.appendChild(el('th', { scope: 'row' }, unitLabel(r[0]))); tr.appendChild(el('td', null, r[1] + '.')); ut.appendChild(tr);
+  });
+
+  /* ===== التبويبات ===== */
+  function setTab(t) {
+    state.tab = t;
+    document.querySelectorAll('.tabs button').forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.tab === t)); });
+    ['cum', 'custom', 'howto'].forEach(function (v) { document.getElementById('view-' + v).hidden = v !== t; });
+  }
+  document.querySelectorAll('.tabs button').forEach(function (b) { b.addEventListener('click', function () { setTab(b.dataset.tab); }); });
+
+  /* ===== التشغيل ===== */
+  [1, 2, 3, 4].forEach(buildStage);
+  syncOpen();
+  update();
+  buildCustom();
+  updateCustom();
+  setTab('cum');
+})();
+</script>
+</body>
+</html>
